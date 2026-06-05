@@ -140,6 +140,58 @@ const getCarById = async (req, res, next) => {
 // ================================
 // CREATE CAR LISTING (Sell a car)
 // ================================
+// const createCar = async (req, res, next) => {
+//   try {
+//     const {
+//       brand, model, year, trim, price, originalPrice, condition, mileage,
+//       modelType, fuelType, transmission, driveType, engineSize, horsepower,
+//       color, doors, seats, features, location, city, description,
+//     } = req.body;
+
+//     // Get the 3D model URL from DB based on modelType
+//     const model3D = await CarModel3D.findOne({ where: { modelType } });
+
+//     const car = await Car.create({
+//       brand, model, year, trim,
+//       price, originalPrice,
+//       condition, mileage,
+//       modelType,
+//       model3dUrl: model3D?.url || null,
+//       model3dPublicId: model3D?.publicId || null,
+//       fuelType, transmission, driveType, engineSize, horsepower,
+//       color, doors, seats,
+//       features: features ? JSON.parse(features) : [],
+//       location, city,
+//       description,
+//       sellerId: req.user.id,
+//     });
+
+//     // Handle uploaded images (from multer-cloudinary)
+//     if (req.files && req.files.length > 0) {
+//       const imageRecords = req.files.map((file, index) => ({
+//         carId: car.id,
+//         url: file.path,          // Cloudinary URL
+//         publicId: file.filename, // Cloudinary public_id
+//         isPrimary: index === 0,  // First image is primary
+//         order: index,
+//       }));
+//       await CarImage.bulkCreate(imageRecords);
+//     }
+
+//     // Fetch car with images
+//     const createdCar = await Car.findByPk(car.id, {
+//       include: [{ model: CarImage, as: 'images' }],
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: 'Car listed successfully',
+//       data: { car: createdCar },
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 const createCar = async (req, res, next) => {
   try {
     const {
@@ -148,16 +200,17 @@ const createCar = async (req, res, next) => {
       color, doors, seats, features, location, city, description,
     } = req.body;
 
-    // Get the 3D model URL from DB based on modelType
-    const model3D = await CarModel3D.findOne({ where: { modelType } });
+    // Get 3D model URL from uploaded file
+    const model3dUrl = req.file ? req.file.path : null;
+    const model3dPublicId = req.file ? req.file.filename : null;
 
     const car = await Car.create({
       brand, model, year, trim,
       price, originalPrice,
       condition, mileage,
-      modelType,
-      model3dUrl: model3D?.url || null,
-      model3dPublicId: model3D?.publicId || null,
+      modelType: modelType || `${brand}_${model}`.toLowerCase().replace(/\s+/g, '_'),
+      model3dUrl,
+      model3dPublicId,
       fuelType, transmission, driveType, engineSize, horsepower,
       color, doors, seats,
       features: features ? JSON.parse(features) : [],
@@ -166,33 +219,15 @@ const createCar = async (req, res, next) => {
       sellerId: req.user.id,
     });
 
-    // Handle uploaded images (from multer-cloudinary)
-    if (req.files && req.files.length > 0) {
-      const imageRecords = req.files.map((file, index) => ({
-        carId: car.id,
-        url: file.path,          // Cloudinary URL
-        publicId: file.filename, // Cloudinary public_id
-        isPrimary: index === 0,  // First image is primary
-        order: index,
-      }));
-      await CarImage.bulkCreate(imageRecords);
-    }
-
-    // Fetch car with images
-    const createdCar = await Car.findByPk(car.id, {
-      include: [{ model: CarImage, as: 'images' }],
-    });
-
     return res.status(201).json({
       success: true,
       message: 'Car listed successfully',
-      data: { car: createdCar },
+      data: { car },
     });
   } catch (error) {
     next(error);
   }
 };
-
 // ================================
 // UPDATE CAR
 // ================================

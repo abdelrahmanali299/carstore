@@ -17,11 +17,13 @@ router.get('/filter-options', getFilterOptions);  // GET /api/cars/filter-option
 router.get('/:id', optionalAuth, getCarById);     // GET /api/cars/:id
 
 // Protected routes (must be logged in)
+const { uploadCarModel } = require('../config/cloudinary'); // add this import
+
 router.post(
   '/',
   authenticate,
   (req, res, next) => {
-    uploadCarImages(req, res, (err) => {
+    uploadCarModel(req, res, (err) => {
       if (err) return res.status(400).json({ success: false, message: err.message });
       next();
     });
@@ -31,7 +33,6 @@ router.post(
     body('model').notEmpty().withMessage('Model is required'),
     body('year').isInt({ min: 1900 }).withMessage('Valid year required'),
     body('price').isFloat({ min: 0 }).withMessage('Valid price required'),
-    body('modelType').isIn(['sedan', 'suv', 'truck']).withMessage('modelType must be sedan, suv, or truck'),
   ],
   validate,
   createCar

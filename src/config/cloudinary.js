@@ -16,9 +16,8 @@ const modelStorage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: 'carstore/3d-models',
-    resource_type: 'raw', // Required for non-image files like .glb
+    resource_type: 'raw',
     allowed_formats: ['glb', 'gltf'],
-    // Models are named by type: sedan, suv, truck
     public_id: (req, file) => {
       const modelType = req.body.modelType || 'default';
       return `model_${modelType}_${Date.now()}`;
@@ -26,6 +25,21 @@ const modelStorage = new CloudinaryStorage({
   },
 });
 
+// Per-car 3D model storage
+const carModelStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'carstore/car-models',
+    resource_type: 'raw',
+    allowed_formats: ['glb', 'gltf'],
+    public_id: (req, file) => `car_model_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  },
+});
+
+const uploadCarModel = multer({
+  storage: carModelStorage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+}).single('model3d');
 // ================================
 // STORAGE: Car Images
 // ================================
@@ -107,6 +121,7 @@ const getModelUrl = async (modelType) => {
 module.exports = {
   cloudinary,
   uploadModel,
+  uploadCarModel,      // ← add this
   uploadCarImages,
   uploadAvatar,
   deleteFromCloudinary,

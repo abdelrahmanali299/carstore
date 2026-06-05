@@ -49,8 +49,8 @@ const Car = sequelize.define(
     // ── 3D Model (Cloudinary) ──
     // Maps car to one of your 3 pre-uploaded 3D models
     modelType: {
-      type: DataTypes.ENUM('sedan', 'suv', 'truck'),
-      allowNull: false,
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     // The actual Cloudinary URL of the 3D model (.glb)
     model3dUrl: {
