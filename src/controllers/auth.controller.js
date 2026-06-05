@@ -110,22 +110,6 @@ const googleCallback = async (req, res) => {
   }
 };
 
-// ================================
-// FACEBOOK OAUTH CALLBACK
-// ================================
-const facebookCallback = async (req, res) => {
-  try {
-    const user = req.user;
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
-    await user.update({ refreshToken });
-
-    const redirectUrl = `${process.env.FLUTTER_SCHEME}?accessToken=${accessToken}&refreshToken=${refreshToken}&userId=${user.id}`;
-    return res.redirect(redirectUrl);
-  } catch (error) {
-    res.redirect(`${process.env.FLUTTER_SCHEME}?error=auth_failed`);
-  }
-};
 
 // ================================
 // REFRESH TOKEN
@@ -181,4 +165,4 @@ const getMe = async (req, res) => {
   res.json({ success: true, data: { user: req.user.toSafeJSON() } });
 };
 
-module.exports = { register, login, googleCallback, facebookCallback, refreshToken, logout, getMe };
+module.exports = { register, login, googleCallback, refreshToken, logout, getMe };

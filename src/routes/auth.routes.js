@@ -50,15 +50,6 @@ router.get('/google/failure', (req, res) => {
   res.status(401).json({ success: false, message: 'Google authentication failed' });
 });
 
-// ── Facebook OAuth ──
-router.get('/facebook', passport.authenticate('facebook', { scope: ['email'], session: false }));
-router.get(
-  '/facebook/callback',
-  passport.authenticate('facebook', { session: false, failureRedirect: '/api/auth/facebook/failure' }),
-  facebookCallback
-);
-router.get('/facebook/failure', (req, res) => {
-  res.status(401).json({ success: false, message: 'Facebook authentication failed' });
-});
+
 
 module.exports = router;
