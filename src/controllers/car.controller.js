@@ -357,5 +357,40 @@ const getFeaturedCars = async (req, res, next) => {
     next(error);
   }
 };
+// POST /api/cars/upload-model-url
+// Instead of uploading file through API, receive the Cloudinary URL directly
+const createCarWithModelUrl = async (req, res, next) => {
+  try {
+    const {
+      brand, model, year, trim, price, originalPrice, condition, mileage,
+      modelType, model3dUrl, // ← URL comes directly from Cloudinary
+      fuelType, transmission, driveType, engineSize, horsepower,
+      color, doors, seats, features, location, city, description,
+    } = req.body;
 
-module.exports = { getCars, getCarById, createCar, updateCar, deleteCar, getFilterOptions, getFeaturedCars };
+    const car = await Car.create({
+      brand, model, year, trim,
+      price, originalPrice,
+      condition, mileage,
+      modelType: modelType || `${brand}_${model}`.toLowerCase().replace(/\s+/g, '_'),
+      model3dUrl,        // ← Cloudinary URL saved directly
+      model3dPublicId: null,
+      fuelType, transmission, driveType, engineSize, horsepower,
+      color, doors: doors || 4, seats: seats || 5,
+      features: features ? (typeof features === 'string' ? JSON.parse(features) : features) : [],
+      location, city,
+      description,
+      sellerId: req.user.id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Car listed successfully',
+      data: { car },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getCars, getCarById, createCar, updateCar, deleteCar, getFilterOptions, getFeaturedCars, createCarWithModelUrl };

@@ -49,7 +49,22 @@ router.patch(
   },
   updateCar
 );
+const { getCars, getCarById, createCar, updateCar, deleteCar, getFilterOptions, getFeaturedCars, createCarWithModelUrl } = require('../controllers/car.controller');
 
+// Add this route — no file upload middleware needed
+router.post(
+  '/with-url',
+  authenticate,
+  [
+    body('brand').notEmpty().withMessage('Brand is required'),
+    body('model').notEmpty().withMessage('Model is required'),
+    body('year').isInt({ min: 1900 }).withMessage('Valid year required'),
+    body('price').isFloat({ min: 0 }).withMessage('Valid price required'),
+    body('model3dUrl').notEmpty().withMessage('model3dUrl is required'),
+  ],
+  validate,
+  createCarWithModelUrl
+);
 router.delete('/:id', authenticate, deleteCar);
 
 module.exports = router;
