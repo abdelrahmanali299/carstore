@@ -4,7 +4,7 @@ const { body } = require('express-validator');
 
 const {
   getCars, getCarById, createCar, updateCar,
-  deleteCar, getFilterOptions, getFeaturedCars, createCarWithModelUrl,
+  deleteCar, getFilterOptions, getFeaturedCars,
 } = require('../controllers/car.controller');
 const { authenticate, optionalAuth } = require('../middleware/auth.middleware');
 const { uploadCarModel } = require('../config/cloudinary');
@@ -16,22 +16,7 @@ router.get('/featured', getFeaturedCars);
 router.get('/filter-options', getFilterOptions);
 router.get('/:id', optionalAuth, getCarById);
 
-// Create car with direct Cloudinary URL (no file upload — bypasses Vercel 4.5MB limit)
-router.post(
-  '/with-url',
-  authenticate,
-  [
-    body('brand').notEmpty().withMessage('Brand is required'),
-    body('model').notEmpty().withMessage('Model is required'),
-    body('year').isInt({ min: 1900 }).withMessage('Valid year required'),
-    body('price').isFloat({ min: 0 }).withMessage('Valid price required'),
-    body('model3dUrl').notEmpty().withMessage('model3dUrl is required'),
-  ],
-  validate,
-  createCarWithModelUrl
-);
-
-// Create car with file upload
+// Protected routes
 router.post(
   '/',
   authenticate,

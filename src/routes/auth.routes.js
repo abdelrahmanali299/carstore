@@ -4,9 +4,15 @@ const { body } = require('express-validator');
 const router = express.Router();
 
 const {
-  register, login, googleCallback, facebookCallback,
+  register, login, googleCallback,
   refreshToken, logout, getMe,
 } = require('../controllers/auth.controller');
+
+const {
+  resendVerification, verifyEmail,
+  forgotPassword, verifyResetOTP, resetPassword,
+} = require('../controllers/otp.controller');
+
 const { authenticate } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validate.middleware');
 
@@ -32,15 +38,59 @@ router.post(
   login
 );
 
-// ── Refresh / Logout ──
+// ── Email Verification ──
+router.post(
+  '/verify-email',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+  ],
+  validate,
+  verifyEmail
+);
+
+router.post(
+  '/resend-verification',
+  [body('email').isEmail().normalizeEmail()],
+  validate,
+  resendVerification
+);
+
+// ── Forgot Password ──
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().normalizeEmail()],
+  validate,
+  forgotPassword
+);
+
+router.post(
+  '/verify-otp',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+  ],
+  validate,
+  verifyResetOTP
+);
+
+router.post(
+  '/reset-password',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ],
+  validate,
+  resetPassword
+);
+
+// ── Token management ──
 router.post('/refresh', refreshToken);
 router.post('/logout', authenticate, logout);
 router.get('/me', authenticate, getMe);
 
 // ── Google OAuth ──
-// Step 1: Redirect to Google
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
-// Step 2: Google redirects back here
 router.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/api/auth/google/failure' }),
@@ -49,7 +99,5 @@ router.get(
 router.get('/google/failure', (req, res) => {
   res.status(401).json({ success: false, message: 'Google authentication failed' });
 });
-
-
 
 module.exports = router;

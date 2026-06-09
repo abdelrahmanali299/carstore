@@ -46,9 +46,13 @@ const User = sequelize.define(
       unique: true,
       allowNull: true,
     },
-
+    facebookId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: true,
+    },
     authProvider: {
-      type: DataTypes.ENUM('local', 'google'),
+      type: DataTypes.ENUM('local', 'google', 'facebook'),
       defaultValue: 'local',
     },
     isEmailVerified: {
@@ -98,6 +102,7 @@ User.prototype.toSafeJSON = function () {
   delete values.password;
   delete values.refreshToken;
   delete values.googleId;
+  delete values.facebookId;
   return values;
 };
 

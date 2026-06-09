@@ -1,44 +1,44 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/index');
+const { OTP } = require('../models/otp.model');
 const {
   generateAccessToken,
   generateRefreshToken,
 } = require('../middleware/auth.middleware');
+const { generateOTP, getOTPExpiry, sendVerificationEmail } = require('../config/sendgrid');
 
 // ================================
-// REGISTER (Email + Password)
+// REGISTER — sends OTP after signup
 // ================================
 const register = async (req, res, next) => {
   try {
     const { email, password, firstName, lastName, phone } = req.body;
 
-    // Check if email already exists
     const existing = await User.findOne({ where: { email } });
     if (existing) {
       return res.status(409).json({ success: false, message: 'Email already registered' });
     }
 
     const user = await User.create({
-      email,
-      password,
-      firstName,
-      lastName,
-      phone,
+      email, password, firstName, lastName, phone,
       authProvider: 'local',
+      isEmailVerified: false,
     });
 
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
-    await user.update({ refreshToken });
+    // Send verification OTP
+    const otp = generateOTP();
+    await OTP.create({
+      email,
+      otp,
+      type: 'email_verification',
+      expiresAt: getOTPExpiry(),
+    });
+    await sendVerificationEmail(email, firstName, otp);
 
     return res.status(201).json({
       success: true,
-      message: 'Account created successfully',
-      data: {
-        user: user.toSafeJSON(),
-        accessToken,
-        refreshToken,
-      },
+      message: 'Account created! Please check your email for the verification OTP.',
+      data: { email, firstName },
     });
   } catch (error) {
     next(error);
@@ -46,7 +46,7 @@ const register = async (req, res, next) => {
 };
 
 // ================================
-// LOGIN (Email + Password)
+// LOGIN
 // ================================
 const login = async (req, res, next) => {
   try {
@@ -73,6 +73,20 @@ const login = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Account is deactivated' });
     }
 
+    if (!user.isEmailVerified) {
+      // Resend OTP automatically
+      const otp = generateOTP();
+      await OTP.destroy({ where: { email, type: 'email_verification', isUsed: false } });
+      await OTP.create({ email, otp, type: 'email_verification', expiresAt: getOTPExpiry() });
+      await sendVerificationEmail(email, user.firstName, otp);
+
+      return res.status(403).json({
+        success: false,
+        message: 'Email not verified. A new OTP has been sent to your email.',
+        data: { requiresVerification: true, email },
+      });
+    }
+
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
     await user.update({ refreshToken });
@@ -80,11 +94,7 @@ const login = async (req, res, next) => {
     return res.json({
       success: true,
       message: 'Login successful',
-      data: {
-        user: user.toSafeJSON(),
-        accessToken,
-        refreshToken,
-      },
+      data: { user: user.toSafeJSON(), accessToken, refreshToken },
     });
   } catch (error) {
     next(error);
@@ -101,15 +111,12 @@ const googleCallback = async (req, res) => {
     const refreshToken = generateRefreshToken(user);
     await user.update({ refreshToken });
 
-    // Redirect to Flutter deep link with tokens
-    // Flutter must register this scheme: carstore://auth/callback
     const redirectUrl = `${process.env.FLUTTER_SCHEME}?accessToken=${accessToken}&refreshToken=${refreshToken}&userId=${user.id}`;
     return res.redirect(redirectUrl);
   } catch (error) {
     res.redirect(`${process.env.FLUTTER_SCHEME}?error=auth_failed`);
   }
 };
-
 
 // ================================
 // REFRESH TOKEN
@@ -159,7 +166,7 @@ const logout = async (req, res, next) => {
 };
 
 // ================================
-// GET ME (Current User)
+// GET ME
 // ================================
 const getMe = async (req, res) => {
   res.json({ success: true, data: { user: req.user.toSafeJSON() } });
