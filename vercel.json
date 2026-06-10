@@ -3,13 +3,7 @@
   "builds": [
     {
       "src": "src/app.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "node_modules/pg/**",
-          "node_modules/pg-hstore/**"
-        ]
-      }
+      "use": "@vercel/node"
     }
   ],
   "routes": [
