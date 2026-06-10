@@ -12,13 +12,13 @@ const User = sequelize.define(
     },
     email: {
       type: DataTypes.STRING,
-      allowNull: true, // Nullable because Facebook might not return email
+      allowNull: true,
       unique: true,
       validate: { isEmail: true },
     },
     password: {
       type: DataTypes.STRING,
-      allowNull: true, // Null for OAuth users
+      allowNull: true,
     },
     firstName: {
       type: DataTypes.STRING,
@@ -32,13 +32,14 @@ const User = sequelize.define(
     phone: {
       type: DataTypes.STRING,
       allowNull: true,
+      unique: true,
     },
     avatar: {
-      type: DataTypes.TEXT, // Cloudinary URL
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     avatarPublicId: {
-      type: DataTypes.STRING, // Cloudinary public_id for deletion
+      type: DataTypes.STRING,
       allowNull: true,
     },
     googleId: {
@@ -46,16 +47,15 @@ const User = sequelize.define(
       unique: true,
       allowNull: true,
     },
-    facebookId: {
-      type: DataTypes.STRING,
-      unique: true,
-      allowNull: true,
-    },
     authProvider: {
-      type: DataTypes.ENUM('local', 'google', 'facebook'),
+      type: DataTypes.ENUM('local', 'google'),
       defaultValue: 'local',
     },
     isEmailVerified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    isPhoneVerified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
@@ -90,19 +90,16 @@ const User = sequelize.define(
   }
 );
 
-// Instance method - verify password
 User.prototype.comparePassword = async function (candidatePassword) {
   if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Instance method - safe JSON output (remove sensitive fields)
 User.prototype.toSafeJSON = function () {
   const values = { ...this.get() };
   delete values.password;
   delete values.refreshToken;
   delete values.googleId;
-  delete values.facebookId;
   return values;
 };
 

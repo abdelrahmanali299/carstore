@@ -1,40 +1,32 @@
 const { User } = require('../models/index');
 const { OTP } = require('../models/otp.model');
-const {
-  generateOTP, getOTPExpiry,
-  sendVerificationEmail, sendPasswordResetEmail,
-} = require('../config/sendgrid');
+const { generateOTP, getOTPExpiry, sendOTPSms } = require('../config/twilio');
 const { generateAccessToken, generateRefreshToken } = require('../middleware/auth.middleware');
 const { Op } = require('sequelize');
 
 // ================================
-// Helper — create and send OTP
+// Helper — create OTP and send SMS
 // ================================
-const createAndSendOTP = async (email, firstName, type) => {
-  // Delete any existing unused OTPs for this email+type
-  await OTP.destroy({ where: { email, type, isUsed: false } });
+const createAndSendOTP = async (phone, type) => {
+  // Delete old unused OTPs for this phone+type
+  await OTP.destroy({ where: { phone, type, isUsed: false } });
 
   const otp = generateOTP();
   const expiresAt = getOTPExpiry();
 
-  await OTP.create({ email, otp, type, expiresAt });
-
-  if (type === 'email_verification') {
-    await sendVerificationEmail(email, firstName, otp);
-  } else {
-    await sendPasswordResetEmail(email, firstName, otp);
-  }
+  await OTP.create({ phone, otp, type, expiresAt });
+  await sendOTPSms(phone, otp, type);
 
   return otp;
 };
 
 // ================================
-// Helper — verify OTP
+// Helper — verify OTP code
 // ================================
-const verifyOTPCode = async (email, otp, type) => {
+const verifyOTPCode = async (phone, otp, type) => {
   const record = await OTP.findOne({
     where: {
-      email,
+      phone,
       type,
       isUsed: false,
       expiresAt: { [Op.gt]: new Date() },
@@ -46,7 +38,6 @@ const verifyOTPCode = async (email, otp, type) => {
     return { valid: false, message: 'OTP expired or not found. Please request a new one.' };
   }
 
-  // Max 5 wrong attempts
   if (record.attempts >= 5) {
     await record.update({ isUsed: true });
     return { valid: false, message: 'Too many wrong attempts. Please request a new OTP.' };
@@ -58,46 +49,46 @@ const verifyOTPCode = async (email, otp, type) => {
     return { valid: false, message: `Wrong OTP. ${remaining} attempts remaining.` };
   }
 
-  // Mark as used
   await record.update({ isUsed: true });
   return { valid: true };
 };
 
 // ================================
-// POST /api/auth/resend-verification
+// POST /api/auth/send-verification
+// Send OTP to verify phone on register
 // ================================
-const resendVerification = async (req, res, next) => {
+const sendVerification = async (req, res, next) => {
   try {
-    const { email } = req.body;
-    const user = await User.findOne({ where: { email } });
+    const { phone } = req.body;
 
-    if (!user) return res.status(404).json({ success: false, message: 'Email not found' });
-    if (user.isEmailVerified) return res.status(400).json({ success: false, message: 'Email already verified' });
+    const user = await User.findOne({ where: { phone } });
+    if (!user) return res.status(404).json({ success: false, message: 'Phone number not found' });
+    if (user.isPhoneVerified) return res.status(400).json({ success: false, message: 'Phone already verified' });
 
-    await createAndSendOTP(email, user.firstName, 'email_verification');
+    await createAndSendOTP(phone, 'phone_verification');
 
-    return res.json({ success: true, message: 'Verification OTP sent to your email' });
+    return res.json({ success: true, message: `Verification OTP sent to ${phone}` });
   } catch (error) {
     next(error);
   }
 };
 
 // ================================
-// POST /api/auth/verify-email
+// POST /api/auth/verify-phone
 // ================================
-const verifyEmail = async (req, res, next) => {
+const verifyPhone = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const { phone, otp } = req.body;
 
-    const result = await verifyOTPCode(email, otp, 'email_verification');
+    const result = await verifyOTPCode(phone, otp, 'phone_verification');
     if (!result.valid) {
       return res.status(400).json({ success: false, message: result.message });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { phone } });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    await user.update({ isEmailVerified: true });
+    await user.update({ isPhoneVerified: true });
 
     // Auto-login after verification
     const accessToken = generateAccessToken(user);
@@ -106,7 +97,7 @@ const verifyEmail = async (req, res, next) => {
 
     return res.json({
       success: true,
-      message: 'Email verified successfully! Welcome to CarStore 🚗',
+      message: 'Phone verified successfully! Welcome to CarStore 🚗',
       data: {
         user: user.toSafeJSON(),
         accessToken,
@@ -123,44 +114,44 @@ const verifyEmail = async (req, res, next) => {
 // ================================
 const forgotPassword = async (req, res, next) => {
   try {
-    const { email } = req.body;
-    const user = await User.findOne({ where: { email } });
+    const { phone } = req.body;
 
-    // Always return success (don't reveal if email exists)
+    const user = await User.findOne({ where: { phone } });
+
+    // Always return success — don't reveal if phone exists
     if (!user || user.authProvider !== 'local') {
-      return res.json({ success: true, message: 'If this email exists, an OTP has been sent.' });
+      return res.json({ success: true, message: 'If this number is registered, an OTP has been sent.' });
     }
 
-    await createAndSendOTP(email, user.firstName, 'password_reset');
+    await createAndSendOTP(phone, 'password_reset');
 
-    return res.json({ success: true, message: 'Password reset OTP sent to your email' });
+    return res.json({ success: true, message: 'Password reset OTP sent to your phone' });
   } catch (error) {
     next(error);
   }
 };
 
 // ================================
-// POST /api/auth/verify-otp
-// Verifies the OTP is correct before showing reset password screen
+// POST /api/auth/verify-reset-otp
 // ================================
 const verifyResetOTP = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
+    const { phone, otp } = req.body;
 
-    const result = await verifyOTPCode(email, otp, 'password_reset');
+    const result = await verifyOTPCode(phone, otp, 'password_reset');
     if (!result.valid) {
       return res.status(400).json({ success: false, message: result.message });
     }
 
-    // Create a short-lived reset token to use in next step
-    const resetToken = Buffer.from(`${email}:${Date.now()}`).toString('base64');
+    // Issue a short-lived reset token
+    const resetToken = Buffer.from(`${phone}:${Date.now()}`).toString('base64');
 
-    // Store it temporarily in a new OTP record
+    // Store temporarily
     await OTP.create({
-      email,
-      otp: resetToken.slice(0, 6), // store part of token
+      phone,
+      otp: resetToken.slice(0, 6),
       type: 'password_reset',
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min to complete reset
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
       isUsed: false,
     });
 
@@ -179,12 +170,12 @@ const verifyResetOTP = async (req, res, next) => {
 // ================================
 const resetPassword = async (req, res, next) => {
   try {
-    const { email, otp, newPassword } = req.body;
+    const { phone, newPassword } = req.body;
 
-    // Re-verify OTP one more time for security
+    // Check valid session exists
     const record = await OTP.findOne({
       where: {
-        email,
+        phone,
         type: 'password_reset',
         isUsed: false,
         expiresAt: { [Op.gt]: new Date() },
@@ -196,16 +187,15 @@ const resetPassword = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Session expired. Please start over.' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { phone } });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Update password
     await user.update({ password: newPassword, refreshToken: null });
 
-    // Invalidate all OTPs for this email
+    // Invalidate all OTPs for this phone
     await OTP.update(
       { isUsed: true },
-      { where: { email, type: 'password_reset' } }
+      { where: { phone, type: 'password_reset' } }
     );
 
     return res.json({
@@ -218,8 +208,8 @@ const resetPassword = async (req, res, next) => {
 };
 
 module.exports = {
-  resendVerification,
-  verifyEmail,
+  sendVerification,
+  verifyPhone,
   forgotPassword,
   verifyResetOTP,
   resetPassword,

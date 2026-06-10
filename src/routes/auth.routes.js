@@ -3,96 +3,73 @@ const passport = require('passport');
 const { body } = require('express-validator');
 const router = express.Router();
 
-const {
-  register, login, googleCallback,
-  refreshToken, logout, getMe,
-} = require('../controllers/auth.controller');
-
-const {
-  resendVerification, verifyEmail,
-  forgotPassword, verifyResetOTP, resetPassword,
-} = require('../controllers/otp.controller');
-
+const { register, login, googleCallback, refreshToken, logout, getMe } = require('../controllers/auth.controller');
+const { sendVerification, verifyPhone, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/otp.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validate.middleware');
 
-// ── Email / Password ──
-router.post(
-  '/register',
+// ── Register / Login ──
+router.post('/register',
   [
-    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
     body('firstName').notEmpty().withMessage('First name required'),
+    body('password').isLength({ min: 6 }).withMessage('Password min 6 characters'),
+    body('email').optional().isEmail().normalizeEmail(),
+    body('phone').optional().notEmpty(),
   ],
-  validate,
-  register
+  validate, register
 );
 
-router.post(
-  '/login',
+router.post('/login',
   [
-    body('email').isEmail().normalizeEmail(),
-    body('password').notEmpty(),
+    body('password').notEmpty().withMessage('Password required'),
   ],
-  validate,
-  login
+  validate, login
 );
 
-// ── Email Verification ──
-router.post(
-  '/verify-email',
+// ── Phone Verification ──
+router.post('/send-verification',
+  [body('phone').notEmpty().withMessage('Phone required')],
+  validate, sendVerification
+);
+
+router.post('/verify-phone',
   [
-    body('email').isEmail().normalizeEmail(),
+    body('phone').notEmpty().withMessage('Phone required'),
     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
   ],
-  validate,
-  verifyEmail
-);
-
-router.post(
-  '/resend-verification',
-  [body('email').isEmail().normalizeEmail()],
-  validate,
-  resendVerification
+  validate, verifyPhone
 );
 
 // ── Forgot Password ──
-router.post(
-  '/forgot-password',
-  [body('email').isEmail().normalizeEmail()],
-  validate,
-  forgotPassword
+router.post('/forgot-password',
+  [body('phone').notEmpty().withMessage('Phone required')],
+  validate, forgotPassword
 );
 
-router.post(
-  '/verify-otp',
+router.post('/verify-reset-otp',
   [
-    body('email').isEmail().normalizeEmail(),
+    body('phone').notEmpty().withMessage('Phone required'),
     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
   ],
-  validate,
-  verifyResetOTP
+  validate, verifyResetOTP
 );
 
-router.post(
-  '/reset-password',
+router.post('/reset-password',
   [
-    body('email').isEmail().normalizeEmail(),
-    body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('phone').notEmpty().withMessage('Phone required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('Password min 6 characters'),
   ],
-  validate,
-  resetPassword
+  validate, resetPassword
 );
 
-// ── Token management ──
+// ── Token Management ──
 router.post('/refresh', refreshToken);
 router.post('/logout', authenticate, logout);
 router.get('/me', authenticate, getMe);
 
 // ── Google OAuth ──
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
-router.get(
-  '/google/callback',
+router.get('/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/api/auth/google/failure' }),
   googleCallback
 );

@@ -1,44 +1,59 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/index');
 const { OTP } = require('../models/otp.model');
-const {
-  generateAccessToken,
-  generateRefreshToken,
-} = require('../middleware/auth.middleware');
-const { generateOTP, getOTPExpiry, sendVerificationEmail } = require('../config/sendgrid');
+const { generateAccessToken, generateRefreshToken } = require('../middleware/auth.middleware');
+const { generateOTP, getOTPExpiry, sendOTPSms } = require('../config/twilio');
 
 // ================================
-// REGISTER — sends OTP after signup
+// REGISTER — sends SMS OTP after signup
 // ================================
 const register = async (req, res, next) => {
   try {
     const { email, password, firstName, lastName, phone } = req.body;
 
-    const existing = await User.findOne({ where: { email } });
-    if (existing) {
-      return res.status(409).json({ success: false, message: 'Email already registered' });
+    if (email) {
+      const existingEmail = await User.findOne({ where: { email } });
+      if (existingEmail) return res.status(409).json({ success: false, message: 'Email already registered' });
+    }
+
+    if (phone) {
+      const existingPhone = await User.findOne({ where: { phone } });
+      if (existingPhone) return res.status(409).json({ success: false, message: 'Phone already registered' });
     }
 
     const user = await User.create({
       email, password, firstName, lastName, phone,
       authProvider: 'local',
-      isEmailVerified: false,
+      isPhoneVerified: false,
     });
 
-    // Send verification OTP
-    const otp = generateOTP();
-    await OTP.create({
-      email,
-      otp,
-      type: 'email_verification',
-      expiresAt: getOTPExpiry(),
-    });
-    await sendVerificationEmail(email, firstName, otp);
+    // Send OTP via SMS if phone provided
+    if (phone) {
+      const otp = generateOTP();
+      await OTP.create({
+        phone,
+        otp,
+        type: 'phone_verification',
+        expiresAt: getOTPExpiry(),
+      });
+      await sendOTPSms(phone, otp, 'phone_verification');
+
+      return res.status(201).json({
+        success: true,
+        message: 'Account created! OTP sent to your phone number.',
+        data: { phone, firstName },
+      });
+    }
+
+    // No phone — auto verify and return token
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    await user.update({ refreshToken });
 
     return res.status(201).json({
       success: true,
-      message: 'Account created! Please check your email for the verification OTP.',
-      data: { email, firstName },
+      message: 'Account created successfully!',
+      data: { user: user.toSafeJSON(), accessToken, refreshToken },
     });
   } catch (error) {
     next(error);
@@ -50,40 +65,42 @@ const register = async (req, res, next) => {
 // ================================
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, phone, password } = req.body;
 
-    const user = await User.findOne({ where: { email } });
+    const where = email ? { email } : { phone };
+    const user = await User.findOne({ where });
+
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     if (user.authProvider !== 'local') {
       return res.status(400).json({
         success: false,
-        message: `This account uses ${user.authProvider} login. Please use that instead.`,
+        message: `This account uses ${user.authProvider} login.`,
       });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     if (!user.isActive) {
-      return res.status(403).json({ success: false, message: 'Account is deactivated' });
+      return res.status(403).json({ success: false, message: 'Account deactivated' });
     }
 
-    if (!user.isEmailVerified) {
-      // Resend OTP automatically
+    // If phone not verified — resend OTP
+    if (user.phone && !user.isPhoneVerified) {
       const otp = generateOTP();
-      await OTP.destroy({ where: { email, type: 'email_verification', isUsed: false } });
-      await OTP.create({ email, otp, type: 'email_verification', expiresAt: getOTPExpiry() });
-      await sendVerificationEmail(email, user.firstName, otp);
+      await OTP.destroy({ where: { phone: user.phone, type: 'phone_verification', isUsed: false } });
+      await OTP.create({ phone: user.phone, otp, type: 'phone_verification', expiresAt: getOTPExpiry() });
+      await sendOTPSms(user.phone, otp, 'phone_verification');
 
       return res.status(403).json({
         success: false,
-        message: 'Email not verified. A new OTP has been sent to your email.',
-        data: { requiresVerification: true, email },
+        message: 'Phone not verified. A new OTP has been sent.',
+        data: { requiresVerification: true, phone: user.phone },
       });
     }
 
@@ -110,7 +127,6 @@ const googleCallback = async (req, res) => {
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
     await user.update({ refreshToken });
-
     const redirectUrl = `${process.env.FLUTTER_SCHEME}?accessToken=${accessToken}&refreshToken=${refreshToken}&userId=${user.id}`;
     return res.redirect(redirectUrl);
   } catch (error) {
@@ -124,9 +140,7 @@ const googleCallback = async (req, res) => {
 const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken: token } = req.body;
-    if (!token) {
-      return res.status(401).json({ success: false, message: 'Refresh token required' });
-    }
+    if (!token) return res.status(401).json({ success: false, message: 'Refresh token required' });
 
     let payload;
     try {
