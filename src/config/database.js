@@ -1,5 +1,4 @@
 const { Sequelize } = require('sequelize');
-const pg = require('pg');
 
 // Supports both:
 //   - DATABASE_URL (Neon/Vercel style): single connection string
@@ -9,7 +8,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 const sequelize = process.env.DATABASE_URL
   ? new Sequelize(process.env.DATABASE_URL, {
       dialect: 'postgres',
-      dialectModule: pg,
       logging: false,
       dialectOptions: {
         ssl: {
@@ -27,7 +25,6 @@ const sequelize = process.env.DATABASE_URL
         host: process.env.DB_HOST || 'localhost',
         port: process.env.DB_PORT || 5432,
         dialect: 'postgres',
-        dialectModule: pg,
         logging: isProduction ? false : console.log,
         pool: { max: 10, min: 0, acquire: 30000, idle: 10000 },
       }
