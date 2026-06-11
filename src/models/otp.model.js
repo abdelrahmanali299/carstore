@@ -9,7 +9,7 @@ const OTP = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    phone: {
+    email: {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -18,7 +18,7 @@ const OTP = sequelize.define(
       allowNull: false,
     },
     type: {
-      type: DataTypes.ENUM('phone_verification', 'password_reset'),
+      type: DataTypes.ENUM('email_verification', 'password_reset'),
       allowNull: false,
     },
     expiresAt: {
@@ -38,7 +38,7 @@ const OTP = sequelize.define(
     tableName: 'otps',
     timestamps: true,
     indexes: [
-      { fields: ['phone'] },
+      { fields: ['email'] },
       { fields: ['type'] },
     ],
   }

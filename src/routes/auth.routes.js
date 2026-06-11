@@ -4,51 +4,51 @@ const { body } = require('express-validator');
 const router = express.Router();
 
 const { register, login, googleCallback, refreshToken, logout, getMe } = require('../controllers/auth.controller');
-const { sendVerification, verifyPhone, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/otp.controller');
+const { resendVerification, verifyEmail, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/otp.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validate.middleware');
 
-// ── Register / Login ──
+// Register / Login
 router.post('/register',
   [
-    body('firstName').notEmpty().withMessage('First name required'),
+    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
     body('password').isLength({ min: 6 }).withMessage('Password min 6 characters'),
-    body('email').optional().isEmail().normalizeEmail(),
-    body('phone').optional().notEmpty(),
+    body('firstName').notEmpty().withMessage('First name required'),
   ],
   validate, register
 );
 
 router.post('/login',
   [
+    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
     body('password').notEmpty().withMessage('Password required'),
   ],
   validate, login
 );
 
-// ── Phone Verification ──
-router.post('/send-verification',
-  [body('phone').notEmpty().withMessage('Phone required')],
-  validate, sendVerification
+// Email Verification
+router.post('/resend-verification',
+  [body('email').isEmail().normalizeEmail()],
+  validate, resendVerification
 );
 
-router.post('/verify-phone',
+router.post('/verify-email',
   [
-    body('phone').notEmpty().withMessage('Phone required'),
+    body('email').isEmail().normalizeEmail(),
     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
   ],
-  validate, verifyPhone
+  validate, verifyEmail
 );
 
-// ── Forgot Password ──
+// Forgot Password
 router.post('/forgot-password',
-  [body('phone').notEmpty().withMessage('Phone required')],
+  [body('email').isEmail().normalizeEmail()],
   validate, forgotPassword
 );
 
 router.post('/verify-reset-otp',
   [
-    body('phone').notEmpty().withMessage('Phone required'),
+    body('email').isEmail().normalizeEmail(),
     body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
   ],
   validate, verifyResetOTP
@@ -56,18 +56,18 @@ router.post('/verify-reset-otp',
 
 router.post('/reset-password',
   [
-    body('phone').notEmpty().withMessage('Phone required'),
+    body('email').isEmail().normalizeEmail(),
     body('newPassword').isLength({ min: 6 }).withMessage('Password min 6 characters'),
   ],
   validate, resetPassword
 );
 
-// ── Token Management ──
+// Token Management
 router.post('/refresh', refreshToken);
 router.post('/logout', authenticate, logout);
 router.get('/me', authenticate, getMe);
 
-// ── Google OAuth ──
+// Google OAuth
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
 router.get('/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/api/auth/google/failure' }),
