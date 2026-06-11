@@ -1,11 +1,10 @@
 const passport = require('passport');
 const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
-const { Strategy: FacebookStrategy } = require('passport-facebook');
 const { User } = require('../models/user.model');
 
 // ================================
-// JWT STRATEGY (Protected routes)
+// JWT STRATEGY
 // ================================
 passport.use(
   new JwtStrategy(
@@ -40,75 +39,26 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        // Check if user exists with Google ID
         let user = await User.findOne({ where: { googleId: profile.id } });
 
         if (!user) {
-          // Check if email already registered
           const email = profile.emails?.[0]?.value;
           if (email) {
             user = await User.findOne({ where: { email } });
             if (user) {
-              // Link Google account to existing user
               await user.update({ googleId: profile.id });
             }
           }
 
           if (!user) {
-            // Create new user
             user = await User.create({
               googleId: profile.id,
               email: profile.emails?.[0]?.value,
               firstName: profile.name?.givenName || '',
               lastName: profile.name?.familyName || '',
               avatar: profile.photos?.[0]?.value || null,
-              isEmailVerified: true, // Google emails are verified
+              isEmailVerified: true,
               authProvider: 'google',
-            });
-          }
-        }
-
-        return done(null, user);
-      } catch (error) {
-        return done(error, null);
-      }
-    }
-  )
-);
-
-// ================================
-// FACEBOOK OAUTH STRATEGY
-// ================================
-passport.use(
-  new FacebookStrategy(
-    {
-      clientID: process.env.FACEBOOK_APP_ID,
-      clientSecret: process.env.FACEBOOK_APP_SECRET,
-      callbackURL: process.env.FACEBOOK_CALLBACK_URL,
-      profileFields: ['id', 'emails', 'name', 'picture.type(large)'],
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        let user = await User.findOne({ where: { facebookId: profile.id } });
-
-        if (!user) {
-          const email = profile.emails?.[0]?.value;
-          if (email) {
-            user = await User.findOne({ where: { email } });
-            if (user) {
-              await user.update({ facebookId: profile.id });
-            }
-          }
-
-          if (!user) {
-            user = await User.create({
-              facebookId: profile.id,
-              email: profile.emails?.[0]?.value || null,
-              firstName: profile.name?.givenName || '',
-              lastName: profile.name?.familyName || '',
-              avatar: profile.photos?.[0]?.value || null,
-              isEmailVerified: !!profile.emails?.[0]?.value,
-              authProvider: 'facebook',
             });
           }
         }
