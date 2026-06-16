@@ -3,8 +3,15 @@ const passport = require('passport');
 const { body } = require('express-validator');
 const router = express.Router();
 
-const { register, login, googleCallback, refreshToken, logout, getMe } = require('../controllers/auth.controller');
-const { resendVerification, verifyEmail, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/otp.controller');
+const {
+  register,
+  login,
+  googleCallback,
+  googleMobileAuth,
+  refreshToken,
+  logout,
+  getMe
+} = require('../controllers/auth.controller'); const { resendVerification, verifyEmail, forgotPassword, verifyResetOTP, resetPassword } = require('../controllers/otp.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 const { validate } = require('../middleware/validate.middleware');
 
@@ -76,7 +83,6 @@ router.get('/google/callback',
 router.get('/google/failure', (req, res) => {
   res.status(401).json({ success: false, message: 'Google authentication failed' });
 });
-const { register, login, googleCallback, googleMobileAuth, refreshToken, logout, getMe } = require('../controllers/auth.controller');
 
 // Add this route
 router.post('/google/mobile',
