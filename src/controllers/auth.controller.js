@@ -122,5 +122,63 @@ const logout = async (req, res, next) => {
 const getMe = async (req, res) => {
   res.json({ success: true, data: { user: req.user.toSafeJSON() } });
 };
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-module.exports = { register, login, googleCallback, refreshToken, logout, getMe };
+// POST /api/auth/google/mobile — for Flutter
+const googleMobileAuth = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ success: false, message: 'idToken required' });
+
+    // Verify token with Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, given_name, family_name, picture, sub: googleId } = payload;
+
+    // Find or create user
+    let user = await User.findOne({ where: { googleId } });
+
+    if (!user) {
+      if (email) {
+        user = await User.findOne({ where: { email } });
+        if (user) {
+          await user.update({ googleId });
+        }
+      }
+      if (!user) {
+        user = await User.create({
+          googleId,
+          email,
+          firstName: given_name || '',
+          lastName: family_name || '',
+          avatar: picture || null,
+          isEmailVerified: true,
+          authProvider: 'google',
+        });
+      }
+    }
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    await user.update({ refreshToken });
+
+    return res.json({
+      success: true,
+      message: 'Google login successful',
+      data: {
+        user: user.toSafeJSON(),
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    return res.status(401).json({ success: false, message: 'Invalid Google token' });
+  }
+};
+
+module.exports = { register, login, googleCallback, googleMobileAuth, refreshToken, logout, getMe };

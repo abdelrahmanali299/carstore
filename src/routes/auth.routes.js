@@ -76,5 +76,12 @@ router.get('/google/callback',
 router.get('/google/failure', (req, res) => {
   res.status(401).json({ success: false, message: 'Google authentication failed' });
 });
+const { register, login, googleCallback, googleMobileAuth, refreshToken, logout, getMe } = require('../controllers/auth.controller');
 
+// Add this route
+router.post('/google/mobile',
+  [body('idToken').notEmpty().withMessage('idToken required')],
+  validate,
+  googleMobileAuth
+);
 module.exports = router;
