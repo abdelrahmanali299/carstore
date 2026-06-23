@@ -6,17 +6,28 @@ const {
   getCars, getCarById, createCar, updateCar,
   deleteCar, getFilterOptions, getFeaturedCars,
 } = require('../controllers/car.controller');
+
+const {
+  uploadCarImages: uploadCarImagesHandler,
+  getCarImages,
+  deleteCarImage,
+  setPrimaryImage,
+  reorderCarImages,
+} = require('../controllers/carImage.controller');
+
 const { authenticate, optionalAuth } = require('../middleware/auth.middleware');
-const { uploadCarModel } = require('../config/cloudinary');
+const { uploadCarModel, uploadCarImages } = require('../config/cloudinary');
 const { validate } = require('../middleware/validate.middleware');
 
-// Public routes
+// ─── Car routes ──────────────────────────────────────────────────────────────
+
+// Public
 router.get('/', getCars);
 router.get('/featured', getFeaturedCars);
 router.get('/filter-options', getFilterOptions);
 router.get('/:id', optionalAuth, getCarById);
 
-// Protected routes
+// Protected — create car (with optional 3D model)
 router.post(
   '/',
   authenticate,
@@ -36,6 +47,7 @@ router.post(
   createCar
 );
 
+// Protected — update car
 router.patch(
   '/:id',
   authenticate,
@@ -48,6 +60,35 @@ router.patch(
   updateCar
 );
 
+// Protected — delete car
 router.delete('/:id', authenticate, deleteCar);
+
+// ─── Car image sub-routes ─────────────────────────────────────────────────────
+
+// GET  /api/cars/:id/images              — list all images
+router.get('/:id/images', getCarImages);
+
+// POST /api/cars/:id/images              — upload up to 10 images (multipart field: "images")
+router.post(
+  '/:id/images',
+  authenticate,
+  (req, res, next) => {
+    uploadCarImages(req, res, (err) => {
+      if (err) return res.status(400).json({ success: false, message: err.message });
+      next();
+    });
+  },
+  uploadCarImagesHandler
+);
+
+// DELETE /api/cars/:id/images/:imageId   — delete one image
+router.delete('/:id/images/:imageId', authenticate, deleteCarImage);
+
+// PATCH  /api/cars/:id/images/:imageId/primary — set primary image
+router.patch('/:id/images/:imageId/primary', authenticate, setPrimaryImage);
+
+// PATCH  /api/cars/:id/images/reorder    — reorder images
+// Body: { order: ["id1", "id2", ...] }
+router.patch('/:id/images/reorder', authenticate, reorderCarImages);
 
 module.exports = router;

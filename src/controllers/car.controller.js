@@ -2,6 +2,16 @@ const { Op } = require('sequelize');
 const { Car, CarImage, CarModel3D, User } = require('../models/index');
 const { deleteFromCloudinary } = require('../config/cloudinary');
 
+// Shared include for images (ordered by isPrimary desc, then order asc)
+const imageInclude = {
+  model: CarImage,
+  as: 'images',
+  attributes: ['id', 'url', 'isPrimary', 'order'],
+  required: false,
+  separate: true,
+  order: [['isPrimary', 'DESC'], ['order', 'ASC']],
+};
+
 // GET /api/cars
 const getCars = async (req, res, next) => {
   try {
@@ -67,6 +77,7 @@ const getCars = async (req, res, next) => {
           as: 'seller',
           attributes: ['id', 'firstName', 'lastName', 'avatar', 'phone'],
         },
+        imageInclude,
       ],
       order: [[sortField, sortDir]],
       limit: limitNum,
@@ -100,6 +111,7 @@ const getCarById = async (req, res, next) => {
       where: { id: req.params.id, status: { [Op.ne]: 'hidden' } },
       include: [
         { model: User, as: 'seller', attributes: ['id', 'firstName', 'lastName', 'avatar', 'phone'] },
+        imageInclude,
       ],
     });
     if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
@@ -192,7 +204,14 @@ const deleteCar = async (req, res, next) => {
     if (car.model3dPublicId) {
       await deleteFromCloudinary(car.model3dPublicId, 'raw');
     }
-    await car.destroy();
+
+    // Delete all car images from Cloudinary
+    const images = await CarImage.findAll({ where: { carId: car.id } });
+    await Promise.all(
+      images.map((img) => deleteFromCloudinary(img.publicId, 'image').catch(() => {}))
+    );
+
+    await car.destroy(); // CarImage rows deleted via CASCADE
     return res.json({ success: true, message: 'Car deleted' });
   } catch (error) {
     next(error);
@@ -254,7 +273,10 @@ const getFeaturedCars = async (req, res, next) => {
   try {
     const cars = await Car.findAll({
       where: { status: 'available', isFeatured: true },
-      include: [{ model: User, as: 'seller', attributes: ['id', 'firstName', 'lastName'] }],
+      include: [
+        { model: User, as: 'seller', attributes: ['id', 'firstName', 'lastName'] },
+        imageInclude,
+      ],
       order: [['rating', 'DESC']],
       limit: 10,
     });
