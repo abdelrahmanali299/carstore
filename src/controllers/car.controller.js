@@ -24,7 +24,7 @@ const getCars = async (req, res, next) => {
       page = 1, limit = 10, search,
     } = req.query;
 
-    const where = { status: 'available' };
+    // const where = { status: 'available' };
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
@@ -208,7 +208,7 @@ const deleteCar = async (req, res, next) => {
     // Delete all car images from Cloudinary
     const images = await CarImage.findAll({ where: { carId: car.id } });
     await Promise.all(
-      images.map((img) => deleteFromCloudinary(img.publicId, 'image').catch(() => {}))
+      images.map((img) => deleteFromCloudinary(img.publicId, 'image').catch(() => { }))
     );
 
     await car.destroy(); // CarImage rows deleted via CASCADE
