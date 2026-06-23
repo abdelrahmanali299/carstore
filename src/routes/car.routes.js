@@ -8,7 +8,7 @@ const {
 } = require('../controllers/car.controller');
 
 const {
-  uploadCarImages: uploadCarImagesHandler,
+  addCarImages,
   getCarImages,
   deleteCarImage,
   setPrimaryImage,
@@ -16,10 +16,10 @@ const {
 } = require('../controllers/carImage.controller');
 
 const { authenticate, optionalAuth } = require('../middleware/auth.middleware');
-const { uploadCarModel, uploadCarImages } = require('../config/cloudinary');
+const { uploadCarModel } = require('../config/cloudinary');
 const { validate } = require('../middleware/validate.middleware');
 
-// ─── Car routes ──────────────────────────────────────────────────────────────
+// ─── Car routes ───────────────────────────────────────────────────────────────
 
 // Public
 router.get('/', getCars);
@@ -27,7 +27,7 @@ router.get('/featured', getFeaturedCars);
 router.get('/filter-options', getFilterOptions);
 router.get('/:id', optionalAuth, getCarById);
 
-// Protected — create car (with optional 3D model)
+// Protected — create car (with optional 3D model upload)
 router.post(
   '/',
   authenticate,
@@ -63,32 +63,41 @@ router.patch(
 // Protected — delete car
 router.delete('/:id', authenticate, deleteCar);
 
-// ─── Car image sub-routes ─────────────────────────────────────────────────────
+// ─── Car image sub-routes (no file upload — you send Cloudinary URLs) ─────────
 
-// GET  /api/cars/:id/images              — list all images
+// GET    /api/cars/:id/images
 router.get('/:id/images', getCarImages);
 
-// POST /api/cars/:id/images              — upload up to 10 images (multipart field: "images")
+// POST   /api/cars/:id/images
+// Body (JSON): { "images": [{ "url": "https://...", "publicId": "carstore/..." }, ...] }
 router.post(
   '/:id/images',
   authenticate,
-  (req, res, next) => {
-    uploadCarImages(req, res, (err) => {
-      if (err) return res.status(400).json({ success: false, message: err.message });
-      next();
-    });
-  },
-  uploadCarImagesHandler
+  [
+    body('images').isArray({ min: 1 }).withMessage('images must be a non-empty array'),
+    body('images.*.url').notEmpty().isURL().withMessage('Each image must have a valid url'),
+    body('images.*.publicId').notEmpty().withMessage('Each image must have a publicId'),
+  ],
+  validate,
+  addCarImages
 );
 
-// DELETE /api/cars/:id/images/:imageId   — delete one image
+// DELETE /api/cars/:id/images/:imageId
 router.delete('/:id/images/:imageId', authenticate, deleteCarImage);
 
-// PATCH  /api/cars/:id/images/:imageId/primary — set primary image
+// PATCH  /api/cars/:id/images/:imageId/primary
 router.patch('/:id/images/:imageId/primary', authenticate, setPrimaryImage);
 
-// PATCH  /api/cars/:id/images/reorder    — reorder images
-// Body: { order: ["id1", "id2", ...] }
-router.patch('/:id/images/reorder', authenticate, reorderCarImages);
+// PATCH  /api/cars/:id/images/reorder
+// Body (JSON): { "order": ["imageId1", "imageId2", ...] }
+router.patch(
+  '/:id/images/reorder',
+  authenticate,
+  [
+    body('order').isArray({ min: 1 }).withMessage('order must be a non-empty array of image IDs'),
+  ],
+  validate,
+  reorderCarImages
+);
 
 module.exports = router;

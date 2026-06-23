@@ -1,8 +1,10 @@
 const { Car, CarImage } = require('../models/index');
 const { deleteFromCloudinary } = require('../config/cloudinary');
 
-// POST /api/cars/:id/images  — upload 1–10 images for a car
-const uploadCarImages = async (req, res, next) => {
+// POST /api/cars/:id/images
+// Body: { images: [{ url, publicId, isPrimary? }, ...] }
+// You upload to Cloudinary from your app/frontend, then send us the URLs + publicIds.
+const addCarImages = async (req, res, next) => {
   try {
     const car = await Car.findByPk(req.params.id);
     if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
@@ -11,21 +13,34 @@ const uploadCarImages = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: 'No images uploaded' });
+    const { images } = req.body;
+    if (!Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'images must be a non-empty array of { url, publicId } objects',
+      });
     }
 
-    // Count existing images so we can set order correctly
-    const existingCount = await CarImage.count({ where: { carId: car.id } });
-    const hasPrimary   = await CarImage.findOne({ where: { carId: car.id, isPrimary: true } });
+    // Validate each entry has the required fields
+    for (const img of images) {
+      if (!img.url || !img.publicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Each image must have a url and publicId',
+        });
+      }
+    }
 
-    const images = await Promise.all(
-      req.files.map((file, index) =>
+    const existingCount = await CarImage.count({ where: { carId: car.id } });
+    const hasPrimary    = await CarImage.findOne({ where: { carId: car.id, isPrimary: true } });
+
+    const created = await Promise.all(
+      images.map((img, index) =>
         CarImage.create({
           carId:     car.id,
-          url:       file.path,       // Cloudinary secure URL
-          publicId:  file.filename,   // Cloudinary public_id
-          isPrimary: !hasPrimary && index === 0, // first ever upload = primary
+          url:       img.url,
+          publicId:  img.publicId,
+          isPrimary: !hasPrimary && index === 0, // first ever image = primary
           order:     existingCount + index,
         })
       )
@@ -33,23 +48,23 @@ const uploadCarImages = async (req, res, next) => {
 
     return res.status(201).json({
       success: true,
-      message: `${images.length} image(s) uploaded`,
-      data: { images },
+      message: `${created.length} image(s) added`,
+      data: { images: created },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// GET /api/cars/:id/images  — list all images for a car
+// GET /api/cars/:id/images
 const getCarImages = async (req, res, next) => {
   try {
     const car = await Car.findByPk(req.params.id);
     if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
 
     const images = await CarImage.findAll({
-      where:  { carId: car.id },
-      order:  [['order', 'ASC']],
+      where: { carId: car.id },
+      order: [['order', 'ASC']],
     });
 
     return res.json({ success: true, data: { images } });
@@ -58,7 +73,7 @@ const getCarImages = async (req, res, next) => {
   }
 };
 
-// DELETE /api/cars/:id/images/:imageId  — delete a single image
+// DELETE /api/cars/:id/images/:imageId
 const deleteCarImage = async (req, res, next) => {
   try {
     const car = await Car.findByPk(req.params.id);
@@ -73,12 +88,12 @@ const deleteCarImage = async (req, res, next) => {
     });
     if (!image) return res.status(404).json({ success: false, message: 'Image not found' });
 
-    // Remove from Cloudinary
+    // Delete from Cloudinary then from DB
     await deleteFromCloudinary(image.publicId, 'image');
     const wasPrimary = image.isPrimary;
     await image.destroy();
 
-    // If deleted image was primary, promote the next one
+    // Promote next image to primary if the deleted one was primary
     if (wasPrimary) {
       const next_ = await CarImage.findOne({
         where: { carId: car.id },
@@ -93,7 +108,7 @@ const deleteCarImage = async (req, res, next) => {
   }
 };
 
-// PATCH /api/cars/:id/images/:imageId/primary  — set an image as primary
+// PATCH /api/cars/:id/images/:imageId/primary
 const setPrimaryImage = async (req, res, next) => {
   try {
     const car = await Car.findByPk(req.params.id);
@@ -108,7 +123,6 @@ const setPrimaryImage = async (req, res, next) => {
     });
     if (!image) return res.status(404).json({ success: false, message: 'Image not found' });
 
-    // Clear current primary, then set new one
     await CarImage.update({ isPrimary: false }, { where: { carId: car.id } });
     await image.update({ isPrimary: true });
 
@@ -118,7 +132,7 @@ const setPrimaryImage = async (req, res, next) => {
   }
 };
 
-// PATCH /api/cars/:id/images/reorder  — reorder images
+// PATCH /api/cars/:id/images/reorder
 // Body: { order: ["imageId1", "imageId2", ...] }
 const reorderCarImages = async (req, res, next) => {
   try {
@@ -129,9 +143,12 @@ const reorderCarImages = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
-    const { order } = req.body; // array of image IDs in desired order
+    const { order } = req.body;
     if (!Array.isArray(order) || order.length === 0) {
-      return res.status(400).json({ success: false, message: 'order must be a non-empty array of image IDs' });
+      return res.status(400).json({
+        success: false,
+        message: 'order must be a non-empty array of image IDs',
+      });
     }
 
     await Promise.all(
@@ -152,7 +169,7 @@ const reorderCarImages = async (req, res, next) => {
 };
 
 module.exports = {
-  uploadCarImages,
+  addCarImages,
   getCarImages,
   deleteCarImage,
   setPrimaryImage,
