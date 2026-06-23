@@ -24,7 +24,7 @@ const getCars = async (req, res, next) => {
       page = 1, limit = 10, search,
     } = req.query;
 
-    // const where = { status: 'available' };
+    const where = { status: 'available' };
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
