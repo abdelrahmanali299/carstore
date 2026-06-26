@@ -15,6 +15,7 @@ const carRoutes = require('./routes/car.routes');
 const listingRoutes = require('./routes/listing.routes');
 const userRoutes = require('./routes/user.routes');
 const modelRoutes = require('./routes/model.routes');
+const cartRoutes = require('./routes/cart.routes');
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/cars', carRoutes);
 app.use('/api/listings', listingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/models', modelRoutes);
+app.use('/api/cart', cartRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
