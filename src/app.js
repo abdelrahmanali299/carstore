@@ -7,6 +7,7 @@ const passport = require('passport');
 const rateLimit = require('express-rate-limit');
 
 const { sequelize } = require('./config/database');
+require('./models/index'); // ensure all models registered before sync
 require('./config/passport');
 
 // Routes
